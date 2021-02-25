@@ -8,10 +8,13 @@ module.exports = class extends think.Controller {
     if (!file) {
       return this.fail('上传文件错误');
     }
+    const extName = this.getExtName(file.name);
+    if (extName !== '.java') {
+      return this.fail('文件格式错误')
+    }
     const filePath = await this.uploadFile(file);
     const transferDir = path.dirname(filePath); // 获取文件夹地址
     await this.shell(`javac ${transferDir}/*.java`);
-    const extName = this.getExtName(filePath);
     const transferFile = filePath.replace(extName, '.class');
     this.ctx.download(transferFile);
   }
