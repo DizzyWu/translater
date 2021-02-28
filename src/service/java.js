@@ -2,24 +2,38 @@ const fs = require('fs');
 const path = require('path');
 const dayjs = require('dayjs');
 const shell = require('child_process');
-module.exports = class extends think.Controller {
-  async testAction() {
-    const file = this.file('file');
-    if (!file) {
-      return this.fail('上传文件错误');
-    }
-    const extName = this.getExtName(file.name);
+module.exports = class extends think.Service {
+  constructor(file, release, options) {
+    super();
+    this.file = file;
+    this.release = release;
+    this.options = options;
+  }
+  // 编译单一文件
+  async translateSingle () {
+    const extName = this.getExtName();
     if (extName !== '.java') {
       return this.fail('文件格式错误')
     }
-    const filePath = await this.uploadFile(file);
-    const transferDir = path.dirname(filePath); // 获取文件夹地址
-    await this.shell(`javac ${transferDir}/*.java`);
-    const transferFile = filePath.replace(extName, '.class');
-    this.ctx.download(transferFile);
+    const res = await this.uploadFile();
+    if (!think.isFile(res)) {
+      return this.fail(res);
+    }
+    try {
+      const options = this.options ? JSON.parse(this.options) : {}
+      let optionsShell = ''
+      for (let key in options) {
+        optionsShell += ` ${key} ${options[key]}`
+      }
+      await this.shell(`javac --release ${this.release}${optionsShell} ${res}`);
+    } catch (e) {
+      return this.fail(e);
+    }
+    return res.replace(extName, '.class');
   }
   // 文件上传
-  async uploadFile(upFile) {
+  async uploadFile() {
+    let upFile = this.file;
     const fileDir = dayjs() + this.randomNum(3);
     const uploadPath = think.ROOT_PATH + '/fs/' + fileDir;
     think.mkdir(uploadPath);
@@ -27,7 +41,7 @@ module.exports = class extends think.Controller {
     if (upFile && think.isBuffer(upFile.buffer)) {
       fs.writeFileSync(filePath, upFile.buffer);
       if (!think.isFile(filePath)) {
-        return {errmsg: '文件写入失败'};
+        return '文件写入失败';
       }
       upFile.size = upFile.buffer.length;
       upFile.path = filePath;
@@ -44,7 +58,7 @@ module.exports = class extends think.Controller {
           }
           fs.createReadStream(upFilePath).pipe(fs.createWriteStream(filePath)).on('finish', () => {
             if (!think.isFile(filePath)) {
-              return {errmsg: '文件写入失败'};
+              return '文件写入失败';
             }
           });
         } catch (e) {
@@ -55,7 +69,7 @@ module.exports = class extends think.Controller {
     if (think.isFile(filePath)) {
       url = filePath;
     } else {
-      return { errmsg: '文件保存失败' };
+      return '文件保存失败';
     }
     return url;
   }
@@ -68,30 +82,38 @@ module.exports = class extends think.Controller {
     return toInt ? parseInt(rnd) : rnd;
   }
   // 执行命令行指令
-  async shell(cmd) {
+  async shell(cmd, options) {
     if (cmd) {
       cmd = cmd.split('\n').join(` `);
       think.logger.debug('SHELL: ' + cmd);
       return new Promise((resolve, reject) => {
-        shell.exec(cmd, null, (err, data) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(data);
+        shell.exec(cmd, options, (err, stdout, stderr) => {
+          if (stderr) {
+            return reject(stderr.split('\n')[0].split(':')[1].trim())
           }
+          resolve(stdout)
         });
       });
     }
     return null;
   }
   // 获取文件后缀
-  getExtName(path, extType = '.') {
+  getExtName() {
+    const path = this.file.name;
     if (path) {
-      const last = path.lastIndexOf(extType);
+      const last = path.lastIndexOf('.');
       if (last > -1) {
         return path.substring(last);
       }
     }
     return '';
   }
-};
+  // 错误信息
+  fail(msg) {
+    return {
+      errno: 1000,
+      errmsg: msg,
+      data: JSON.parse(this.options),
+    }
+  }
+}
