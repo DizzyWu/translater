@@ -21,9 +21,9 @@ module.exports = class extends think.Service {
     }
     try {
       const options = this.options ? JSON.parse(this.options) : {}
-      let optionsShell = ''
-      for (let key in options) {
-        optionsShell += ` ${key} ${options[key]}`
+      let optionsShell = '';
+      for (const key in options) {
+        optionsShell += ` ${key} ${options[key]}`;
       }
       await this.shell(`javac --release ${this.release}${optionsShell} ${res}`);
     } catch (e) {
@@ -33,7 +33,7 @@ module.exports = class extends think.Service {
   }
   // 文件上传
   async uploadFile() {
-    let upFile = this.file;
+    const upFile = this.file;
     const fileDir = dayjs() + this.randomNum(3);
     const uploadPath = think.ROOT_PATH + '/fs/' + fileDir;
     think.mkdir(uploadPath);
@@ -113,7 +113,7 @@ module.exports = class extends think.Service {
     return {
       errno: 1000,
       errmsg: msg,
-      data: JSON.parse(this.options),
-    }
+      data: this.options ? JSON.parse(this.options) : null
+    };
   }
-}
+};
