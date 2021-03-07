@@ -6,24 +6,39 @@ module.exports = class extends think.Service {
   constructor(file, release, options) {
     super();
     this.file = file;
+    this.fileType = path.extname(file.name) === '.java' ? 'Single' : 'Multi';
     this.release = release;
     this.options = options;
   }
+  // 下载编译后的文件
+  async downloadExecFile(ctrl) {
+    const filePath = await this[`translate${this.fileType}`]();
+    if (!think.isFile(filePath)) {
+      if (think.isError(filePath)) {
+        return ctrl.fail(1000, filePath.message, this.options ? JSON.parse(this.options) : null);
+      } else if (think.isObject(filePath) || !think.isFile(filePath.toString())) {
+        return ctrl.fail(filePath);
+      }
+    }
+    return ctrl.download(filePath, '', () => {
+      fs.rmdirSync(path.dirname(filePath));
+    });
+  }
   // 编译单一文件
-  async translateSingle () {
-    const extName = this.getExtName();
+  async translateSingle() {
+    const extName = path.extname(this.file.name);
     if (extName !== '.java') {
-      return this.fail('文件格式错误')
+      return this.fail('文件格式错误');
     }
     const res = await this.uploadFile();
     if (!think.isFile(res)) {
       return this.fail(res);
     }
     try {
-      const options = this.options ? JSON.parse(this.options) : {}
-      let optionsShell = ''
-      for (let key in options) {
-        optionsShell += ` ${key} ${options[key]}`
+      const options = this.options ? JSON.parse(this.options) : {};
+      let optionsShell = '';
+      for (const key in options) {
+        optionsShell += ` ${key} ${options[key]}`;
       }
       await this.shell(`javac --release ${this.release}${optionsShell} ${res}`);
     } catch (e) {
@@ -33,7 +48,7 @@ module.exports = class extends think.Service {
   }
   // 文件上传
   async uploadFile() {
-    let upFile = this.file;
+    const upFile = this.file;
     const fileDir = dayjs() + this.randomNum(3);
     const uploadPath = think.ROOT_PATH + '/fs/' + fileDir;
     think.mkdir(uploadPath);
@@ -87,33 +102,22 @@ module.exports = class extends think.Service {
       cmd = cmd.split('\n').join(` `);
       think.logger.debug('SHELL: ' + cmd);
       return new Promise((resolve, reject) => {
-        shell.exec(cmd, options, (err, stdout, stderr) => {
+        shell.exec(cmd, options, (stdout, stderr) => {
           if (stderr) {
-            return reject(stderr.split('\n')[0].split(':')[1].trim())
+            return reject(stderr.split('\n')[0].split(':')[1].trim());
           }
-          resolve(stdout)
+          resolve(stdout);
         });
       });
     }
     return null;
-  }
-  // 获取文件后缀
-  getExtName() {
-    const path = this.file.name;
-    if (path) {
-      const last = path.lastIndexOf('.');
-      if (last > -1) {
-        return path.substring(last);
-      }
-    }
-    return '';
   }
   // 错误信息
   fail(msg) {
     return {
       errno: 1000,
       errmsg: msg,
-      data: JSON.parse(this.options),
-    }
+      data: JSON.parse(this.options)
+    };
   }
-}
+};
