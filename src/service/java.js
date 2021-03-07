@@ -117,7 +117,7 @@ module.exports = class extends think.Service {
     return {
       errno: 1000,
       errmsg: msg,
-      data: JSON.parse(this.options)
+      data: this.options ? JSON.parse(this.options) : null
     };
   }
 };
